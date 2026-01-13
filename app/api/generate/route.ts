@@ -80,6 +80,18 @@ async function getGigaChatToken(): Promise<string> {
   }
 
   try {
+    // Проверяем, что GIGACHAT_AUTH установлена
+    if (!GIGACHAT_AUTH) {
+      throw new Error("GIGACHAT_AUTH не установлена в переменных окружения");
+    }
+
+    // Проверяем базовую валидность Base64 (должна начинаться с букв/цифр Base64)
+    const base64Pattern = /^[A-Za-z0-9+/=]+$/;
+    if (!base64Pattern.test(GIGACHAT_AUTH)) {
+      console.error("GIGACHAT_AUTH содержит недопустимые символы для Base64. Первые 20 символов:", GIGACHAT_AUTH.slice(0, 20));
+      throw new Error("GIGACHAT_AUTH не является валидным Base64 (содержит недопустимые символы)");
+    }
+
     // Генерируем RqUID в формате UUID (как в документации)
     function generateUUID(): string {
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -94,6 +106,9 @@ async function getGigaChatToken(): Promise<string> {
     // Формируем body в формате form-data (как в документации Python)
     const formData = new URLSearchParams();
     formData.append('scope', GIGACHAT_SCOPE);
+    
+    // Логируем первые символы для диагностики (БЕЗ полного значения из соображений безопасности)
+    console.log("GIGACHAT_AUTH первые 10 символов:", GIGACHAT_AUTH.slice(0, 10));
     
     // Используем https модуль напрямую для обхода проблем с SSL
     const responseBody = await httpsRequest(
@@ -130,6 +145,20 @@ async function getGigaChatToken(): Promise<string> {
       stack: error.stack,
       cause: error.cause,
     });
+    
+    // Обработка ошибки декодирования (400)
+    if (error.message?.includes("Can't decode") || error.message?.includes("400")) {
+      throw new Error(
+        "Ошибка декодирования заголовка Authorization (400): GIGACHAT_AUTH не является валидным Base64.\n\n" +
+        "Возможные причины:\n" +
+        "1. В Vercel установлено значение без Base64-кодирования (например, client_id:client_secret вместо Base64)\n" +
+        "2. Значение содержит лишние символы (пробелы, переносы строк)\n" +
+        "3. Значение уже содержит префикс 'Basic ' (не нужно - код добавляет его автоматически)\n\n" +
+        "Правильный формат: Base64(client_id:client_secret)\n" +
+        "Пример: MDE5YmI3NTEtNDBmMi03Nzk1LTgxMjctYjQ3YjJlOGNlNWNhOmY2YzVhMTZjLTZjZmYtNGJlZS1hOTYwLTQ3ODQxOThjNzkxOQ==\n\n" +
+        `Детали: ${error.message}`
+      );
+    }
     
     // Обработка ошибки авторизации 401
     if (error.message?.includes("401") || error.message?.includes("Authorization error")) {
