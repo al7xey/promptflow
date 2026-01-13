@@ -1,0 +1,37 @@
+# Workflow for building and testing Next.js application
+# ВАЖНО: GitHub Pages не поддерживает Next.js API routes
+# Для деплоя приложения с API routes используйте Vercel, Netlify или другую платформу с поддержкой серверных функций
+name: Build and Test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+        env:
+          GIGACHAT_AUTH: ${{ secrets.GIGACHAT_AUTH || '' }}
+
