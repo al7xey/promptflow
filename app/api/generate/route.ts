@@ -7,14 +7,15 @@ function httpsRequest(url: string, options: https.RequestOptions, data?: string)
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
     
-    const requestOptions: https.RequestOptions = {
+    const       requestOptions: https.RequestOptions = {
       hostname: urlObj.hostname,
       port: urlObj.port || 443,
       path: urlObj.pathname + urlObj.search,
       method: options.method || "GET",
       headers: options.headers || {},
-      // Отключаем проверку SSL для разработки (НЕБЕЗОПАСНО для продакшена!)
-      rejectUnauthorized: process.env.NODE_ENV === "production",
+      // Отключаем проверку SSL для GigaChat (у них нестандартный TLS-сертификат)
+      // Это необходимо для работы в Vercel/production
+      rejectUnauthorized: false,
     };
 
     const req = https.request(requestOptions, (res) => {
