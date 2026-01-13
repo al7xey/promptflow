@@ -6,8 +6,36 @@
   --font-geist-sans: 'Geist', system-ui, -apple-system, sans-serif;
 }
 
+html {
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0) rgba(0, 0, 0, 0); /* Firefox - прозрачный скроллбар */
+}
+
+html::-webkit-scrollbar {
+  width: 8px;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
 body {
   @apply bg-zinc-950 text-zinc-100;
+}
+
+/* Скрытие скроллбара для внутренних элементов */
+*:not(html) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*:not(html)::-webkit-scrollbar {
+  display: none;
 }
 
 @layer utilities {

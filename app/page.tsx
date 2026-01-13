@@ -62,7 +62,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl space-y-8">
+      <div className="w-full max-w-3xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
@@ -145,30 +145,25 @@ export default function Home() {
 
         {/* Result Section */}
         {result && !isLoading && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-zinc-200">
-                Улучшенный промпт
-              </h2>
-              <button
-                onClick={handleCopy}
-                className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg
-                         hover:bg-zinc-800 transition-colors flex items-center gap-2
-                         text-sm text-zinc-300"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Скопировано</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Копировать</span>
-                  </>
-                )}
-              </button>
-            </div>
+          <div className="relative">
+            <button
+              onClick={handleCopy}
+              className="absolute top-4 right-4 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg
+                       hover:bg-zinc-800 transition-colors flex items-center gap-2
+                       text-sm text-zinc-300 z-10"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Скопировано</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  <span>Копировать</span>
+                </>
+              )}
+            </button>
 
             <div className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-lg
                           prose prose-invert prose-headings:text-zinc-100 
