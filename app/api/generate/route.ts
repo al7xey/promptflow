@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import https from "https";
 import type { GigaChatTokenResponse, GigaChatResponse } from "@/app/types";
 
+// Указываем Node.js runtime для Vercel (не Edge)
+export const runtime = "nodejs";
+
 // Функция для выполнения HTTPS запроса с отключенной проверкой SSL (только для разработки!)
 function httpsRequest(url: string, options: https.RequestOptions, data?: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -128,6 +131,16 @@ async function getGigaChatToken(): Promise<string> {
       cause: error.cause,
     });
     
+    // Обработка ошибки авторизации 401
+    if (error.message?.includes("401") || error.message?.includes("Authorization error")) {
+      throw new Error(
+        "Ошибка авторизации GigaChat (401): заголовок авторизации неверный.\n" +
+        "Убедитесь, что переменная GIGACHAT_AUTH в Vercel содержит Base64-кодированную строку client_id:client_secret.\n" +
+        "Формат: Base64(client_id:client_secret)\n" +
+        `Детали: ${error.message}`
+      );
+    }
+    
     // Более детальное сообщение об ошибке
     if (error.message?.includes("fetch failed") || error.cause?.code === "ECONNREFUSED" || error.cause?.code === "ENOTFOUND") {
       throw new Error(
@@ -152,6 +165,18 @@ async function getGigaChatToken(): Promise<string> {
 
 export async function POST(request: Request) {
   try {
+    // Проверяем наличие переменной окружения
+    if (!process.env.GIGACHAT_AUTH) {
+      console.error("GIGACHAT_AUTH не установлена в переменных окружения");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "GIGACHAT_AUTH не настроена. Проверьте переменные окружения в Vercel.",
+        },
+        { status: 500 }
+      );
+    }
+
     const { prompt } = await request.json();
 
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
@@ -190,10 +215,18 @@ export async function POST(request: Request) {
         JSON.stringify(payload)
       );
 
-      const data: GigaChatResponse = JSON.parse(apiResponseBody);
+      let data: GigaChatResponse;
+      try {
+        data = JSON.parse(apiResponseBody);
+      } catch (parseError: any) {
+        console.error("Ошибка парсинга ответа GigaChat:", apiResponseBody);
+        throw new Error(`Неверный формат ответа от GigaChat: ${parseError.message}`);
+      }
+
       const text = data.choices?.[0]?.message?.content?.trim();
 
       if (!text) {
+        console.error("Пустой ответ от GigaChat:", JSON.stringify(data, null, 2));
         throw new Error("Ответ от модели пустой. Попробуйте снова.");
       }
 
@@ -202,6 +235,11 @@ export async function POST(request: Request) {
         data: text,
       });
     } catch (apiError: any) {
+      console.error("Ошибка при запросе к GigaChat API:", {
+        message: apiError.message,
+        stack: apiError.stack,
+      });
+      
       // Обработка ошибок API
       if (apiError.message?.includes("401") || apiError.message?.includes("Unauthorized")) {
         // Токен истек, очищаем кэш
@@ -214,14 +252,24 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
+      
+      // Пробрасываем ошибку дальше для общего обработчика
       throw apiError;
     }
   } catch (error: any) {
-    console.error("Ошибка API:", error);
+    console.error("Ошибка API:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
+    
+    // Возвращаем более детальную информацию об ошибке
+    const errorMessage = error.message || "Произошла ошибка при генерации промпта";
+    
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Произошла ошибка при генерации промпта",
+        error: errorMessage,
       },
       { status: 500 }
     );
