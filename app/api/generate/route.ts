@@ -69,7 +69,7 @@ const SYSTEM_INSTRUCTION = `Ты — Prompt Engineer элитного уровн
 
 **Output Format** (как должен выглядеть результат). 
 
-Ответ выдавай строго на русском языке в формате Markdown внутри блока кода.`;
+Ответ выдавай строго на русском языке в формате Markdown внутри блока кода. После ответа и перед ответом ничего не пиши`;
 
 // Функция для получения access token от GigaChat
 async function getGigaChatToken(): Promise<string> {
