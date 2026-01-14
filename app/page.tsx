@@ -1,9 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import { Copy, Check, Loader2, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Copy, Check, Loader2, RefreshCw, Lock } from "lucide-react";
 import { ApiResponse } from "./types";
+
+const FREE_LIMIT = 10;
+const LS_KEYS = {
+  isPaid: 'pf_access_paid',
+  usedCount: 'pf_free_used'
+};
+
+interface UserState {
+  isPaid: boolean;
+  usedCount: number;
+}
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
@@ -12,10 +24,30 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
+  const [userState, setUserState] = useState<UserState>({ isPaid: false, usedCount: 0 });
+
+  // Загрузка состояния из localStorage
+  useEffect(() => {
+    const loadState = (): UserState => {
+      const isPaid = localStorage.getItem(LS_KEYS.isPaid) === 'true';
+      const usedCount = parseInt(localStorage.getItem(LS_KEYS.usedCount) || '0', 10);
+      return {
+        isPaid,
+        usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0
+      };
+    };
+    setUserState(loadState());
+  }, []);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError("Введите запрос для улучшения");
+      return;
+    }
+
+    // Проверка лимита бесплатных попыток
+    if (!userState.isPaid && userState.usedCount >= FREE_LIMIT) {
+      setError("Бесплатный лимит исчерпан. Оформите вечный доступ для продолжения.");
       return;
     }
 
@@ -41,6 +73,13 @@ export default function Home() {
       }
 
       setResult(data.data || null);
+
+      // Увеличиваем счетчик использованных попыток только при успешной генерации
+      if (!userState.isPaid) {
+        const newUsedCount = userState.usedCount + 1;
+        localStorage.setItem(LS_KEYS.usedCount, String(newUsedCount));
+        setUserState({ ...userState, usedCount: newUsedCount });
+      }
     } catch (err: any) {
       setError(err.message || "Произошла ошибка. Попробуйте еще раз.");
     } finally {
@@ -60,6 +99,9 @@ export default function Home() {
     }
   };
 
+  const attemptsLeft = Math.max(0, FREE_LIMIT - userState.usedCount);
+  const canGenerate = userState.isPaid || attemptsLeft > 0;
+
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-3xl space-y-6">
@@ -71,6 +113,42 @@ export default function Home() {
           <p className="text-zinc-400 text-sm">
             Превращаем короткие запросы в глубокие промпты для нейросетей
           </p>
+        </div>
+
+        {/* Информация о лимите и статусе */}
+        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-1 rounded-full border ${
+                userState.isPaid 
+                  ? 'bg-green-950/30 border-green-800/50 text-green-400'
+                  : 'bg-zinc-800/50 border-zinc-700 text-zinc-400'
+              }`}>
+                {userState.isPaid ? '✓ Премиум-доступ' : 'Бесплатный доступ'}
+              </span>
+              {!userState.isPaid && (
+                <span className="text-xs text-zinc-500">
+                  Осталось: <strong className="text-zinc-300">{attemptsLeft}</strong> / {FREE_LIMIT}
+                </span>
+              )}
+            </div>
+            {!userState.isPaid && attemptsLeft === 0 && (
+              <Link
+                href="/payment"
+                className="text-xs text-orange-400 hover:text-orange-300 underline underline-offset-2 transition-colors"
+              >
+                Купить вечный доступ за 99₽ →
+              </Link>
+            )}
+          </div>
+          {!userState.isPaid && (
+            <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+              <div 
+                className="h-full rounded-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 transition-all duration-300"
+                style={{ width: `${Math.min(100, (userState.usedCount / FREE_LIMIT) * 100)}%` }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Input Section */}
@@ -89,7 +167,7 @@ export default function Home() {
           <div className="flex gap-3">
             <button
               onClick={handleGenerate}
-              disabled={isLoading || !prompt.trim()}
+              disabled={isLoading || !prompt.trim() || !canGenerate}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-zinc-800 to-zinc-900 
                      border border-zinc-800 rounded-lg text-white font-medium
                      hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] 
@@ -101,6 +179,11 @@ export default function Home() {
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   <span>Генерация...</span>
+                </>
+              ) : !canGenerate ? (
+                <>
+                  <Lock className="w-5 h-5" />
+                  <span>Лимит исчерпан</span>
                 </>
               ) : (
                 "Улучшить промпт"
@@ -128,6 +211,16 @@ export default function Home() {
         {error && (
           <div className="p-4 bg-red-950/20 border border-red-900/50 rounded-lg">
             <p className="text-red-400 text-sm">{error}</p>
+            {!canGenerate && (
+              <Link
+                href="/payment"
+                className="mt-3 inline-block px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-500 
+                         text-white text-sm font-semibold rounded-lg hover:shadow-lg 
+                         hover:shadow-orange-500/30 transition-all duration-200"
+              >
+                Купить вечный доступ за 99₽
+              </Link>
+            )}
           </div>
         )}
 
