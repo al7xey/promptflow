@@ -8,13 +8,15 @@ import { ApiResponse } from "./types";
 
 const FREE_LIMIT = 10;
 const LS_KEYS = {
-  isPaid: 'pf_access_paid',
-  usedCount: 'pf_free_used'
+  isPaid: "pf_access_paid",
+  usedCount: "pf_free_used",
+  bonusBlocks: "pf_bonus_blocks", // количество пакетов по +10 попыток за рекламу
 };
 
 interface UserState {
   isPaid: boolean;
   usedCount: number;
+  bonusBlocks: number;
 }
 
 export default function Home() {
@@ -24,7 +26,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [hasRequested, setHasRequested] = useState(false);
-  const [userState, setUserState] = useState<UserState>({ isPaid: false, usedCount: 0 });
+  const [userState, setUserState] = useState<UserState>({
+    isPaid: false,
+    usedCount: 0,
+    bonusBlocks: 0,
+  });
+  const [isAdRewardLoading, setIsAdRewardLoading] = useState(false);
 
   // Загрузка состояния из localStorage
   useEffect(() => {
@@ -32,16 +39,20 @@ export default function Home() {
     
     const loadState = (): UserState => {
       try {
-        const isPaid = localStorage.getItem(LS_KEYS.isPaid) === 'true';
-        const usedCountStr = localStorage.getItem(LS_KEYS.usedCount) || '0';
+        const isPaid = localStorage.getItem(LS_KEYS.isPaid) === "true";
+        const usedCountStr = localStorage.getItem(LS_KEYS.usedCount) || "0";
+        const bonusBlocksStr = localStorage.getItem(LS_KEYS.bonusBlocks) || "0";
         const usedCount = parseInt(usedCountStr, 10);
+        const bonusBlocks = parseInt(bonusBlocksStr, 10);
         return {
           isPaid,
-          usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0
+          usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0,
+          bonusBlocks:
+            Number.isFinite(bonusBlocks) && bonusBlocks >= 0 ? bonusBlocks : 0,
         };
       } catch (error) {
-        console.error('Ошибка чтения localStorage:', error);
-        return { isPaid: false, usedCount: 0 };
+        console.error("Ошибка чтения localStorage:", error);
+        return { isPaid: false, usedCount: 0, bonusBlocks: 0 };
       }
     };
     setUserState(loadState());
@@ -86,12 +97,12 @@ export default function Home() {
       if (!userState.isPaid) {
         try {
           const newUsedCount = userState.usedCount + 1;
-          if (typeof window !== 'undefined') {
+          if (typeof window !== "undefined") {
             localStorage.setItem(LS_KEYS.usedCount, String(newUsedCount));
           }
           setUserState({ ...userState, usedCount: newUsedCount });
         } catch (error) {
-          console.error('Ошибка сохранения состояния:', error);
+          console.error("Ошибка сохранения состояния:", error);
         }
       }
     } catch (err: any) {
@@ -113,15 +124,52 @@ export default function Home() {
     }
   };
 
-  const attemptsLeft = Math.max(0, FREE_LIMIT - userState.usedCount);
+  const totalFreeLimit =
+    FREE_LIMIT + (userState.isPaid ? 0 : userState.bonusBlocks * 10);
+  const attemptsLeft = Math.max(0, totalFreeLimit - userState.usedCount);
   const canGenerate = userState.isPaid || attemptsLeft > 0;
+
+  const handleAdReward = async () => {
+    if (userState.isPaid || isAdRewardLoading) return;
+
+    // Разрешаем получать бонус только если базовый лимит уже израсходован
+    if (attemptsLeft > 0) {
+      setError(
+        "Сначала используйте текущие бесплатные улучшения, затем можно получить ещё 10 за просмотр рекламы."
+      );
+      return;
+    }
+
+    setIsAdRewardLoading(true);
+    setError(null);
+
+    try {
+      /*
+        Здесь должен быть вызов SDK рекламной сети.
+        После успешного просмотра рекламы вызываем начисление бонуса.
+      */
+
+      await new Promise((resolve) => setTimeout(resolve, 1500)); // имитация ожидания рекламы
+
+      const newBonusBlocks = userState.bonusBlocks + 1;
+      if (typeof window !== "undefined") {
+        localStorage.setItem(LS_KEYS.bonusBlocks, String(newBonusBlocks));
+      }
+      setUserState({ ...userState, bonusBlocks: newBonusBlocks });
+    } catch (e) {
+      console.error("Ошибка при начислении бонуса за рекламу:", e);
+      setError("Не удалось получить бонус за рекламу. Попробуйте ещё раз позже.");
+    } finally {
+      setIsAdRewardLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-3xl space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold text-white">
             PromptFlow
           </h1>
           <p className="text-zinc-400 text-sm">
@@ -130,37 +178,57 @@ export default function Home() {
         </div>
 
         {/* Информация о лимите и статусе */}
-        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2">
-              <span className={`text-xs px-2 py-1 rounded-full border ${
+              <span className={`text-xs px-3 py-1.5 rounded-full border ${
                 userState.isPaid 
-                  ? 'bg-green-950/30 border-green-800/50 text-green-400'
-                  : 'bg-zinc-800/50 border-zinc-700 text-zinc-400'
+                  ? 'bg-green-900/30 border-green-700 text-green-300'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-200'
               }`}>
                 {userState.isPaid ? '✓ Премиум-доступ' : 'Бесплатный доступ'}
               </span>
               {!userState.isPaid && (
                 <span className="text-xs text-zinc-500">
-                  Осталось: <strong className="text-zinc-300">{attemptsLeft}</strong> / {FREE_LIMIT}
+                  Осталось: <strong className="text-zinc-300">{attemptsLeft}</strong> / {totalFreeLimit}
                 </span>
               )}
             </div>
-            {!userState.isPaid && attemptsLeft === 0 && (
-              <Link
-                href="/payment"
-                className="text-xs text-orange-400 hover:text-orange-300 underline underline-offset-2 transition-colors"
-              >
-                Купить вечный доступ за 99₽ →
-              </Link>
-            )}
+            <Link
+              href="/payment"
+              className="text-xs px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700 transition-colors"
+            >
+              Купить вечный доступ за 99₽
+            </Link>
           </div>
           {!userState.isPaid && (
             <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
               <div 
-                className="h-full rounded-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 transition-all duration-300"
-                style={{ width: `${Math.min(100, (userState.usedCount / FREE_LIMIT) * 100)}%` }}
+                className="h-full rounded-full bg-zinc-200 transition-all duration-300"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (userState.usedCount / Math.max(1, totalFreeLimit)) * 100
+                  )}%`,
+                }}
               />
+            </div>
+          )}
+
+          {!userState.isPaid && attemptsLeft === 0 && (
+            <div className="pt-2 flex flex-wrap gap-2 justify-between items-center">
+              <span className="text-xs text-zinc-500">
+                Бесплатный лимит исчерпан. Можно получить ещё 10 улучшений за просмотр рекламы.
+              </span>
+              <button
+                type="button"
+                onClick={handleAdReward}
+                disabled={isAdRewardLoading}
+                className="text-xs px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200
+                         hover:bg-zinc-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isAdRewardLoading ? "Начисляем бонус..." : "+10 улучшений за рекламу"}
+              </button>
             </div>
           )}
         </div>
@@ -182,12 +250,9 @@ export default function Home() {
             <button
               onClick={handleGenerate}
               disabled={isLoading || !prompt.trim() || !canGenerate}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-zinc-800 to-zinc-900 
-                     border border-zinc-800 rounded-lg text-white font-medium
-                     hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] 
-                     hover:border-zinc-700 transition-all duration-300
-                     disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none
-                     flex items-center justify-center gap-2"
+              className="flex-1 px-6 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white font-medium
+                     hover:bg-zinc-700 hover:border-zinc-600 transition-all duration-200
+                     disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -279,8 +344,8 @@ export default function Home() {
                           prose-pre:border prose-pre:border-zinc-800
                           prose-ul:text-zinc-300 prose-ol:text-zinc-300
                           prose-li:text-zinc-300 prose-blockquote:text-zinc-400
-                          prose-blockquote:border-zinc-700 prose-h1:text-2xl
-                          prose-h2:text-xl prose-h3:text-lg
+                          prose-blockquote:border-zinc-700 prose-h1:text-xl
+                          prose-h2:text-lg prose-h3:text-base
                           max-w-none">
               <ReactMarkdown
                 components={{
