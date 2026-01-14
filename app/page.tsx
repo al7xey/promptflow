@@ -28,13 +28,21 @@ export default function Home() {
 
   // Загрузка состояния из localStorage
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const loadState = (): UserState => {
-      const isPaid = localStorage.getItem(LS_KEYS.isPaid) === 'true';
-      const usedCount = parseInt(localStorage.getItem(LS_KEYS.usedCount) || '0', 10);
-      return {
-        isPaid,
-        usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0
-      };
+      try {
+        const isPaid = localStorage.getItem(LS_KEYS.isPaid) === 'true';
+        const usedCountStr = localStorage.getItem(LS_KEYS.usedCount) || '0';
+        const usedCount = parseInt(usedCountStr, 10);
+        return {
+          isPaid,
+          usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0
+        };
+      } catch (error) {
+        console.error('Ошибка чтения localStorage:', error);
+        return { isPaid: false, usedCount: 0 };
+      }
     };
     setUserState(loadState());
   }, []);
@@ -76,9 +84,15 @@ export default function Home() {
 
       // Увеличиваем счетчик использованных попыток только при успешной генерации
       if (!userState.isPaid) {
-        const newUsedCount = userState.usedCount + 1;
-        localStorage.setItem(LS_KEYS.usedCount, String(newUsedCount));
-        setUserState({ ...userState, usedCount: newUsedCount });
+        try {
+          const newUsedCount = userState.usedCount + 1;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LS_KEYS.usedCount, String(newUsedCount));
+          }
+          setUserState({ ...userState, usedCount: newUsedCount });
+        } catch (error) {
+          console.error('Ошибка сохранения состояния:', error);
+        }
       }
     } catch (err: any) {
       setError(err.message || "Произошла ошибка. Попробуйте еще раз.");

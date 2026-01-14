@@ -22,18 +22,27 @@ interface PaymentRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    // Проверка Content-Type
+    const contentType = request.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      return NextResponse.json(
+        { error: "Некорректный тип контента" },
+        { status: 400 }
+      );
+    }
+
     const body: PaymentRequest = await request.json();
     const { amount, currency } = body;
 
-    // Валидация
-    if (!amount || amount !== 99) {
+    // Валидация типов данных
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount !== 99) {
       return NextResponse.json(
         { error: "Некорректная сумма платежа" },
         { status: 400 }
       );
     }
 
-    if (currency !== "RUB") {
+    if (typeof currency !== 'string' || currency !== "RUB") {
       return NextResponse.json(
         { error: "Поддерживается только валюта RUB" },
         { status: 400 }

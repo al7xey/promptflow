@@ -23,31 +23,47 @@ function PaymentPageContent() {
 
   // Загрузка состояния из localStorage
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const loadState = (): UserState => {
-      const isPaid = localStorage.getItem(LS_KEYS.isPaid) === 'true';
-      const usedCount = parseInt(localStorage.getItem(LS_KEYS.usedCount) || '0', 10);
-      return {
-        isPaid,
-        usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0
-      };
+      try {
+        const isPaid = localStorage.getItem(LS_KEYS.isPaid) === 'true';
+        const usedCountStr = localStorage.getItem(LS_KEYS.usedCount) || '0';
+        const usedCount = parseInt(usedCountStr, 10);
+        return {
+          isPaid,
+          usedCount: Number.isFinite(usedCount) && usedCount >= 0 ? usedCount : 0
+        };
+      } catch (error) {
+        console.error('Ошибка чтения localStorage:', error);
+        return { isPaid: false, usedCount: 0 };
+      }
     };
     setState(loadState());
   }, []);
 
   // Проверка возврата с ЮKassa
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const paymentStatus = searchParams.get('payment') || searchParams.get('access');
+    // Безопасная проверка параметров
     if (paymentStatus && (paymentStatus === 'success' || paymentStatus === 'activated')) {
-      const newState = { isPaid: true, usedCount: 0 };
-      localStorage.setItem(LS_KEYS.isPaid, 'true');
-      localStorage.setItem(LS_KEYS.usedCount, '0');
-      setState(newState);
-      setMessage({ text: 'Оплата успешно завершена. Доступ активен.', type: 'success' });
-      
-      // Очистка URL параметров
-      if (window.history.replaceState) {
-        const cleanUrl = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
+      try {
+        const newState = { isPaid: true, usedCount: 0 };
+        localStorage.setItem(LS_KEYS.isPaid, 'true');
+        localStorage.setItem(LS_KEYS.usedCount, '0');
+        setState(newState);
+        setMessage({ text: 'Оплата успешно завершена. Доступ активен.', type: 'success' });
+        
+        // Очистка URL параметров
+        if (window.history.replaceState) {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      } catch (error) {
+        console.error('Ошибка сохранения состояния оплаты:', error);
+        setMessage({ text: 'Ошибка при активации доступа. Обратитесь в поддержку.', type: 'error' });
       }
     }
   }, [searchParams]);
@@ -84,11 +100,22 @@ function PaymentPageContent() {
 
       const result = await response.json();
 
-      if (result && result.confirmationUrl) {
-        if (result.paymentId) {
-          sessionStorage.setItem('pf_last_payment_id', result.paymentId);
+      // Безопасная проверка URL перед редиректом
+      if (result && result.confirmationUrl && typeof result.confirmationUrl === 'string') {
+        // Проверка, что URL от ЮKassa
+        const url = result.confirmationUrl;
+        if (url.startsWith('https://yookassa.ru/') || url.startsWith('https://yoomoney.ru/')) {
+          if (result.paymentId && typeof result.paymentId === 'string') {
+            try {
+              sessionStorage.setItem('pf_last_payment_id', result.paymentId);
+            } catch (e) {
+              console.warn('Не удалось сохранить paymentId в sessionStorage:', e);
+            }
+          }
+          window.location.href = url;
+        } else {
+          throw new Error('Некорректный URL подтверждения платежа');
         }
-        window.location.href = result.confirmationUrl;
       } else {
         throw new Error('Некорректный ответ сервера.');
       }
@@ -264,26 +291,30 @@ function PaymentPageContent() {
               onClick={() => {
                 if (!state.isPaid && state.usedCount >= FREE_LIMIT) return;
                 
-                const newUsedCount = state.isPaid ? state.usedCount : state.usedCount + 1;
-                localStorage.setItem(LS_KEYS.usedCount, String(newUsedCount));
-                setState({ ...state, usedCount: newUsedCount });
+                try {
+                  const newUsedCount = state.isPaid ? state.usedCount : state.usedCount + 1;
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem(LS_KEYS.usedCount, String(newUsedCount));
+                  }
+                  setState({ ...state, usedCount: newUsedCount });
 
-                const now = new Date();
-                const timeString = now.toLocaleTimeString('ru-RU', { 
-                  hour: '2-digit', 
-                  minute: '2-digit', 
-                  second: '2-digit' 
-                });
+                  const now = new Date();
+                  const timeString = now.toLocaleTimeString('ru-RU', { 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit' 
+                  });
 
-                const demoOutput = document.getElementById('demo-output');
-                if (demoOutput) {
-                  demoOutput.innerHTML = `
-                    <strong>[${timeString}]</strong> Промт улучшен. ${
-                      state.isPaid
-                        ? 'У вас активен вечный доступ — лимиты не применяются.'
-                        : `Вы использовали ${newUsedCount} из ${FREE_LIMIT} бесплатных улучшений.`
-                    }
-                  `;
+                  const demoOutput = document.getElementById('demo-output');
+                  if (demoOutput) {
+                    // Безопасное обновление текста без innerHTML
+                    const message = state.isPaid
+                      ? `[${timeString}] Промт улучшен. У вас активен вечный доступ — лимиты не применяются.`
+                      : `[${timeString}] Промт улучшен. Вы использовали ${newUsedCount} из ${FREE_LIMIT} бесплатных улучшений.`;
+                    demoOutput.textContent = message;
+                  }
+                } catch (error) {
+                  console.error('Ошибка при обновлении состояния:', error);
                 }
               }}
               disabled={!state.isPaid && state.usedCount >= FREE_LIMIT}
@@ -307,7 +338,7 @@ function PaymentPageContent() {
             <div 
               id="demo-output"
               className="min-h-[120px] p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 
-                       text-sm text-zinc-400 leading-relaxed"
+                       text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap"
             >
               Нажмите «Улучшить промт», чтобы симулировать использование сервиса и уменьшить количество бесплатных попыток.
             </div>
